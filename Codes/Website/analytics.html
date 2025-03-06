@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - Smart Parking</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script type="module">
+        import { firebaseConfig } from './firebase-config.js';
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getDatabase(app);
+
+            // Historical/Overall Analytics
+            const historyRef = ref(db, "parking_history");
+            onValue(historyRef, (snapshot) => {
+                const data = snapshot.val();
+                let totalEvents = 0;
+                let occupiedEvents = 0;
+                let occupancyDurations = [];
+                let slotStats = {};
+                let hourlyUsage = Array(24).fill(0);
+                let dailyUsage = {};
+
+                if (data) {
+                    for (const slot in data) {
+                        const slotNumber = slot.replace('slot', '');
+                        const events = Object.values(data[slot]).sort((a, b) => 
+                            new Date(a.timestamp) - new Date(b.timestamp)
+                        );
+                        totalEvents += events.length;
+                        slotStats[slotNumber] = { occupied: 0, total: events.length };
+
+                        events.forEach((entry, index) => {
+                            if (entry.occupied) {
+                                occupiedEvents++;
+                                slotStats[slotNumber].occupied++;
+
+                                if (index < events.length - 1 && events[index + 1].timestamp) {
+                                    const start = new Date(entry.timestamp);
+                                    const end = new Date(events[index + 1].timestamp);
+                                    const duration = (end - start) / 1000 / 60;
+                                    if (duration > 0 && duration < 1440) occupancyDurations.push(duration);
+                                }
+                            }
+
+                            if (entry.timestamp) {
+                                const hour = new Date(entry.timestamp).getHours();
+                                const date = new Date(entry.timestamp).toISOString().split('T')[0];
+                                if (entry.occupied) {
+                                    hourlyUsage[hour]++;
+                                    dailyUsage[date] = (dailyUsage[date] || 0) + 1;
+                                }
+                            }
+                        });
+                    }
+                }
+
+                const historicalRate = totalEvents ? (occupiedEvents / totalEvents * 100).toFixed(2) : 0;
+                const avgDuration = occupancyDurations.length ? 
+                    (occupancyDurations.reduce((a, b) => a + b, 0) / occupancyDurations.length).toFixed(2) : 0;
+
+                let slotStatsOutput = "";
+                for (const slot in slotStats) {
+                    const rate = slotStats[slot].total ? (slotStats[slot].occupied / slotStats[slot].total * 100).toFixed(2) : 0;
+                    slotStatsOutput += `<p>Slot ${slot}: <span class="occupied">${slotStats[slot].occupied}</span>/<span>${slotStats[slot].total}</span> (${rate}%)</p>`;
+                }
+
+                const maxUsage = Math.max(...hourlyUsage);
+                const peakHours = hourlyUsage
+                    .map((count, hour) => count === maxUsage ? hour : -1)
+                    .filter(hour => hour !== -1)
+                    .map(hour => `${hour}:00-${hour + 1}:00`)
+                    .join(", ");
+
+                const now = new Date();
+                const last24h = new Date(now - 24 * 60 * 60 * 1000);
+                let recentEvents = 0;
+                if (data) {
+                    for (const slot in data) {
+                        recentEvents += Object.values(data[slot]).filter(entry => 
+                            entry.timestamp && new Date(entry.timestamp) >= last24h
+                        ).length;
+                    }
+                }
+
+                document.getElementById("overallAnalytics").innerHTML = `
+                    <div class="section">
+                        <h3>Overall Statistics</h3>
+                        <p>Total Events: ${totalEvents}</p>
+                        <p class="occupied">Occupied Events: ${occupiedEvents}</p>
+                        <p>Historical Occupancy Rate: ${historicalRate}%</p>
+                        <p>Average Occupancy Duration: ${avgDuration} minutes</p>
+                    </div>
+                    <div class="section">
+                        <h3>Per-Slot Occupancy</h3>
+                        ${slotStatsOutput || '<p>No slot data available.</p>'}
+                    </div>
+                    <div class="section">
+                        <h3>Peak Usage Times</h3>
+                        <p>${peakHours ? `Peak Hours: ${peakHours} (${maxUsage} occupancies)` : 'No peak data yet.'}</p>
+                    </div>
+                    <div class="section">
+                        <h3>Recent Activity (Last 24 Hours)</h3>
+                        <p>Events: ${recentEvents}</p>
+                    </div>
+                `;
+
+                // Charts
+                updatePieChart(occupiedEvents, totalEvents - occupiedEvents);
+                updateBarChart(hourlyUsage);
+                updateDailyBarChart(dailyUsage);
+            }, (error) => {
+                console.error("Error fetching history data:", error);
+                document.getElementById("overallAnalytics").innerHTML = "<p>Error: " + error.message + "</p>";
+            });
+
+            // Pie Chart (Overall Occupancy)
+            let pieChart = null;
+            function updatePieChart(occupied, available) {
+                const ctx = document.getElementById("overallPieChart").getContext("2d");
+                if (pieChart) pieChart.destroy();
+
+                pieChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Occupied', 'Available'],
+                        datasets: [{
+                            data: [occupied, available],
+                            backgroundColor: ['#e53e3e', '#38a169'],
+                            borderColor: '#ffffff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'top' },
+                            title: { display: true, text: 'Overall Occupancy Distribution' }
+                        }
+                    }
+                });
+            }
+
+            // Bar Chart (Hourly Usage)
+            let hourlyBarChart = null;
+            function updateBarChart(hourlyUsage) {
+                const ctx = document.getElementById("hourlyBarChart").getContext("2d");
+                if (hourlyBarChart) hourlyBarChart.destroy();
+
+                hourlyBarChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+                        datasets: [{
+                            label: 'Occupied Slots',
+                            data: hourlyUsage,
+                            backgroundColor: '#63b3ed',
+                            borderColor: '#2d3748',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: { beginAtZero: true, title: { display: true, text: 'Number of Occupancies' } },
+                            x: { title: { display: true, text: 'Hour of Day' } }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            title: { display: true, text: 'Hourly Usage Pattern' }
+                        }
+                    }
+                });
+            }
+
+            // Bar Chart (Daily Usage)
+            let dailyBarChart = null;
+            function updateDailyBarChart(dailyUsage) {
+                const ctx = document.getElementById("dailyBarChart").getContext("2d");
+                if (dailyBarChart) dailyBarChart.destroy();
+
+                const dates = Object.keys(dailyUsage).sort();
+                const counts = dates.map(date => dailyUsage[date]);
+
+                dailyBarChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: 'Occupied Slots',
+                            data: counts,
+                            backgroundColor: '#ecc94b', // Yellow for daily trend
+                            borderColor: '#2d3748',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: { beginAtZero: true, title: { display: true, text: 'Number of Occupancies' } },
+                            x: { title: { display: true, text: 'Date' } }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            title: { display: true, text: 'Daily Usage Trend' }
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+            document.getElementById("overallAnalytics").innerHTML = "<p>Failed to connect to Firebase: " + error.message + "</p>";
+        }
+    </script>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="availability.html">Current Availability</a>
+        <a href="history.html">History</a>
+        <a href="analytics.html">Analytics</a>
+    </nav>
+    <div class="container analytics">
+        <!-- Header Section -->
+        <section class="header">
+            <h1>Overall Parking Analytics</h1>
+            <p class="header-subtitle">Explore historical usage patterns and trends with interactive charts.</p>
+        </section>
+
+        <!-- Overall Analytics -->
+        <section class="section">
+            <h2>Analytics Overview</h2>
+            <div class="card">
+                <div id="overallAnalytics">Loading...</div>
+                <canvas id="overallPieChart" class="chart"></canvas>
+                <canvas id="hourlyBarChart" class="chart"></canvas>
+                <canvas id="dailyBarChart" class="chart"></canvas>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p>© 2025 Smart Parking System. Powered by Firebase.</p>
+        </footer>
+    </div>
+</body>
+</html>

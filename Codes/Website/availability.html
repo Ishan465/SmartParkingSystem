@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Current Availability - Smart Parking</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <script type="module">
+        import { firebaseConfig } from './firebase-config.js';
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getDatabase(app);
+            const parkingRef = ref(db, "parking");
+
+            onValue(parkingRef, (snapshot) => {
+                const data = snapshot.val();
+                let output = "";
+                let totalSlots = 0;
+                let availableSlots = 0;
+
+                if (data) {
+                    for (const slot in data) {
+                        totalSlots++;
+                        const isOccupied = data[slot].occupied;
+                        if (!isOccupied) availableSlots++;
+                        const status = isOccupied ? "Occupied" : "Available";
+                        const statusClass = isOccupied ? "occupied" : "available";
+                        output += `
+                            <div class="card ${statusClass}">
+                                <div class="icon"></div>
+                                <h3>Slot ${slot.replace('slot', '')}</h3>
+                                <p class="status">${status}</p>
+                                <p class="timestamp">Last Updated: ${data[slot].timestamp || 'N/A'}</p>
+                            </div>
+                        `;
+                    }
+                    document.getElementById("availabilitySummary").innerHTML = `
+                        <p>Total Slots: ${totalSlots}</p>
+                        <p>Available: ${availableSlots}</p>
+                        <p>Occupied: ${totalSlots - availableSlots}</p>
+                    `;
+                } else {
+                    output = "<p class='no-data'>No slots available yet.</p>";
+                    document.getElementById("availabilitySummary").innerHTML = "<p>No data available.</p>";
+                }
+                document.getElementById("parkingData").innerHTML = output;
+            }, (error) => {
+                console.error("Error fetching parking data:", error);
+                document.getElementById("parkingData").innerHTML = "<p class='error'>Error loading data: " + error.message + "</p>";
+                document.getElementById("availabilitySummary").innerHTML = "<p>Error occurred.</p>";
+            });
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+            document.getElementById("parkingData").innerHTML = "<p class='error'>Failed to connect to Firebase: " + error.message + "</p>";
+            document.getElementById("availabilitySummary").innerHTML = "<p>Connection failed.</p>";
+        }
+    </script>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="availability.html">Current Availability</a>
+        <a href="history.html">History</a>
+        <a href="analytics.html">Analytics</a>
+    </nav>
+    <div class="container">
+        <!-- Header Section -->
+        <section class="header">
+            <h1>Current Availability</h1>
+            <p class="header-subtitle">Check the real-time status of all parking slots below.</p>
+            <div id="availabilitySummary" class="summary card">Loading...</div>
+        </section>
+
+        <!-- Parking Slots -->
+        <section class="parking-slots">
+            <h2>Slot Status</h2> <!-- Added subheading for clarity -->
+            <div id="parkingData" class="grid">Loading...</div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p>© 2025 Smart Parking System. Powered by Firebase.</p>
+        </footer>
+    </div>
+</body>
+</html>

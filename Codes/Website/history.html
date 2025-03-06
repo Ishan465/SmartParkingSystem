@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - Smart Parking</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .slot-table {
+            margin-top: 20px;
+        }
+    </style>
+    <script type="module">
+    import { firebaseConfig } from './firebase-config.js';
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+    try {
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const historyRef = ref(db, "parking_history");
+
+        let allHistoryData = {};
+        let activeFilters = {
+            date: null, // "today" or null
+            status: null, // "occupied", "available", or null
+            slot: "all" // "all" or specific slot (e.g., "slot1")
+        };
+
+        onValue(historyRef, (snapshot) => {
+            allHistoryData = snapshot.val() || {};
+            renderHistory(applyFilters(allHistoryData));
+            populateSlotFilter(); // Populate dropdown on initial load
+        }, (error) => {
+            console.error("Error fetching history data:", error);
+            document.getElementById("historyData").innerHTML = "<p>Error loading data: " + error.message + "</p>";
+        });
+
+        // Filter buttons
+        document.getElementById("filterToday").addEventListener("click", () => {
+            activeFilters.date = activeFilters.date === "today" ? null : "today";
+            updateButtonState("filterToday", activeFilters.date === "today");
+            renderHistory(applyFilters(allHistoryData));
+        });
+
+        document.getElementById("filterOccupied").addEventListener("click", () => {
+            activeFilters.status = activeFilters.status === "occupied" ? null : "occupied";
+            updateButtonState("filterOccupied", activeFilters.status === "occupied");
+            updateButtonState("filterAvailable", false);
+            renderHistory(applyFilters(allHistoryData));
+        });
+
+        document.getElementById("filterAvailable").addEventListener("click", () => {
+            activeFilters.status = activeFilters.status === "available" ? null : "available";
+            updateButtonState("filterAvailable", activeFilters.status === "available");
+            updateButtonState("filterOccupied", false);
+            renderHistory(applyFilters(allHistoryData));
+        });
+
+        document.getElementById("filterNone").addEventListener("click", () => {
+            activeFilters = { date: null, status: null, slot: "all" };
+            updateButtonState("filterToday", false);
+            updateButtonState("filterOccupied", false);
+            updateButtonState("filterAvailable", false);
+            document.getElementById("slotFilter").value = "all";
+            renderHistory(allHistoryData);
+        });
+
+        // Slot filter dropdown
+        document.getElementById("slotFilter").addEventListener("change", (e) => {
+            activeFilters.slot = e.target.value;
+            renderHistory(applyFilters(allHistoryData));
+        });
+
+        function updateButtonState(buttonId, isActive) {
+            const button = document.getElementById(buttonId);
+            button.style.backgroundColor = isActive ? "#63b3ed" : ""; // Highlight active filter
+            button.style.color = isActive ? "white" : "";
+        }
+
+        function applyFilters(data) {
+            let filteredData = JSON.parse(JSON.stringify(data));
+            const today = new Date().toISOString().split("T")[0];
+
+            // Apply date filter
+            if (activeFilters.date === "today") {
+                for (const slot in filteredData) {
+                    filteredData[slot] = Object.fromEntries(
+                        Object.entries(filteredData[slot]).filter(([_, entry]) =>
+                            entry.timestamp && entry.timestamp.startsWith(today)
+                        )
+                    );
+                }
+            }
+
+            // Apply status filter
+            if (activeFilters.status === "occupied") {
+                for (const slot in filteredData) {
+                    filteredData[slot] = Object.fromEntries(
+                        Object.entries(filteredData[slot]).filter(([_, entry]) => entry.occupied)
+                    );
+                }
+            } else if (activeFilters.status === "available") {
+                for (const slot in filteredData) {
+                    filteredData[slot] = Object.fromEntries(
+                        Object.entries(filteredData[slot]).filter(([_, entry]) => !entry.occupied)
+                    );
+                }
+            }
+
+            // Apply slot filter
+            if (activeFilters.slot !== "all") {
+                filteredData = { [activeFilters.slot]: filteredData[activeFilters.slot] || {} };
+            }
+
+            return filteredData;
+        }
+
+        function renderHistory(data) {
+            let output = "";
+            if (data) {
+                for (const slot in data) {
+                    const slotNumber = slot.replace('slot', '');
+                    if (Object.keys(data[slot]).length === 0) continue;
+
+                    // Collect all entries for this slot with their timestamps
+                    const entries = Object.entries(data[slot]).map(([millis, entry]) => ({
+                        millis,
+                        ...entry
+                    }));
+
+                    // Sort entries by timestamp (descending order - most recent first)
+                    entries.sort((a, b) => {
+                        const timeA = new Date(a.timestamp).getTime();
+                        const timeB = new Date(b.timestamp).getTime();
+                        return timeB - timeA; // Descending order
+                    });
+
+                    output += `
+                        <div class="slot-table">
+                            <h2>Slot ${slotNumber}</h2>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Timestamp</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                    for (const entry of entries) {
+                        const status = entry.occupied ? "Occupied" : "Available";
+                        output += `
+                            <tr>
+                                <td>${status}</td>
+                                <td>${entry.timestamp || "No timestamp"}</td>
+                            </tr>
+                        `;
+                    }
+
+                    output += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+                if (!output) output = "<p>No matching history found.</p>";
+            } else {
+                output = "<p>No history available yet.</p>";
+            }
+            document.getElementById("historyData").innerHTML = output;
+        }
+
+        function populateSlotFilter() {
+            const slotSelect = document.getElementById("slotFilter");
+            if (!slotSelect.hasChildNodes()) {
+                slotSelect.innerHTML = '<option value="all">All Slots</option>';
+                Object.keys(allHistoryData).sort().forEach(slot => {
+                    const slotNumber = slot.replace('slot', '');
+                    slotSelect.innerHTML += `<option value="${slot}">Slot ${slotNumber}</option>`;
+                });
+            }
+        }
+    } catch (error) {
+        console.error("Firebase initialization error:", error);
+        document.getElementById("historyData").innerHTML = "<p>Failed to connect to Firebase: " + error.message + "</p>";
+    }
+</script>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="availability.html">Current Availability</a>
+        <a href="history.html">History</a>
+        <a href="analytics.html">Analytics</a>
+    </nav>
+    <div class="container">
+        <h1>Parking History</h1>
+        <div>
+            <button id="filterToday">Today</button>
+            <button id="filterOccupied">Occupied</button>
+            <button id="filterAvailable">Available</button>
+            <button id="filterNone">All</button>
+            <select id="slotFilter"></select>
+        </div>
+        <div id="historyData" class="grid">Loading...</div>
+    </div>
+
+    <footer>
+        <p>© 2025 Smart Parking System. Powered by Firebase.</p>
+    </footer>
+</body>
+</html>
