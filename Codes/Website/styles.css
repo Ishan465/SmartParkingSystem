@@ -3,30 +3,29 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Poppins', 'Arial', sans-serif; /* Switched to Poppins for a modern, friendly feel */
+    font-family: 'Poppins', 'Arial', sans-serif; /* Modern, friendly font */
 }
 
 /* Body */
 body {
-    background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%); /* Softer gradient for subtlety */
+    background: linear-gradient(135deg, #fff9e6 0%, #e6f7ff 100%); /* Warmer, inviting gradient */
     min-height: 100vh;
-    padding: 0; /* Remove padding from body, let container handle it */
-    color: #2d3748; /* Darker gray for better readability */
-    line-height: 1.6; /* Improved readability */
+    padding: 0;
+    color: #2d3748; /* Dark gray for readability */
+    line-height: 1.8; /* Increased for better text flow */
 }
 
 /* Navigation */
 nav {
-    background: #1a202c; /* Slightly darker, richer navy */
+    background: #1a202c; /* Rich navy background */
     padding: 1rem 2rem;
-    position: sticky; /* Sticky navbar for better navigation */
+    position: sticky;
     top: 0;
     z-index: 1000;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Depth with shadow */
     display: flex;
     justify-content: center;
     align-items: center;
-    border-radius: 0; /* Remove rounding for a full-width navbar */
 }
 
 nav a {
@@ -35,12 +34,14 @@ nav a {
     margin: 0 1.5rem;
     font-size: 1.1rem;
     font-weight: 500;
-    transition: color 0.3s ease;
+    padding: 0.5rem 1rem; /* Added padding for larger click area */
+    transition: background 0.3s ease, color 0.3s ease;
 }
 
 nav a:hover {
-    color: #63b3ed; /* Light blue hover effect */
-    text-decoration: none; /* Remove underline, use color for emphasis */
+    background: #2d3748; /* Darker navy on hover */
+    color: #63b3ed; /* Light blue for interactivity */
+    border-radius: 5px; /* Rounded hover effect */
 }
 
 /* Headings */
@@ -52,68 +53,71 @@ h1, h2 {
 }
 
 h1 {
-    font-size: 2.5rem; /* Larger for prominence */
-    letter-spacing: 1px;
+    font-size: 3rem; /* Larger for prominence */
+    letter-spacing: 2px; /* Spacing for clarity */
 }
 
 h2 {
-    font-size: 1.75rem;
+    font-size: 2rem; /* Slightly larger */
+    letter-spacing: 1px;
 }
 
 /* Container */
 .container {
-    max-width: 1280px; /* Slightly wider for modern screens */
+    max-width: 1280px;
     margin: 2rem auto;
-    padding: 0 1.5rem; /* Side padding for content */
+    padding: 0 1.5rem;
 }
 
 /* Grid Layout */
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Slightly wider cards */
-    gap: 2rem; /* More breathing room */
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2rem;
 }
 
 /* Card Styles */
 .card {
     background: #ffffff;
     border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05); /* Softer, larger shadow */
+    padding: 2rem; /* More padding for comfort */
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
     text-align: center;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
-    border: 1px solid #edf2f7; /* Subtle border for definition */
+    border: 1px solid #edf2f7;
+    opacity: 0;
+    animation: fadeIn 0.5s ease forwards; /* Fade-in for engagement */
 }
 
 .card:hover {
-    transform: translateY(-5px); /* Lift effect instead of scale for subtlety */
+    transform: translateY(-5px);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
 }
 
 /* Icon */
 .icon {
-    width: 60px; /* Slightly larger for visual impact */
-    height: 60px;
-    margin: 0 auto 1rem;
+    width: 80px; /* Larger for visual appeal */
+    height: 80px;
+    margin: 0 auto 1.5rem;
     border-radius: 50%;
     transition: transform 0.3s ease;
 }
 
 .card:hover .icon {
-    transform: scale(1.1); /* Subtle icon animation on hover */
+    transform: scale(1.1);
 }
 
 .available .icon {
-    background: #38a169; /* Vibrant green */
+    background: #38a169;
 }
 
 .occupied .icon {
-    background: #e53e3e; /* Vibrant red */
+    background: #e53e3e;
 }
 
 /* Status */
 .status {
-    font-size: 1.5rem; /* Larger for emphasis */
+    font-size: 1.5rem;
     font-weight: 600;
     margin-bottom: 0.75rem;
 }
@@ -128,15 +132,15 @@ h2 {
 
 /* Timestamp and Paragraphs */
 .timestamp, .card p {
-    font-size: 0.9rem;
-    color: #718096; /* Softer gray for secondary text */
+    font-size: 1rem; /* Increased for readability */
+    color: #718096;
 }
 
 /* Responsive Design */
 @media (max-width: 768px) {
     nav {
         padding: 1rem;
-        flex-wrap: wrap; /* Allow nav items to wrap on small screens */
+        flex-wrap: wrap;
     }
 
     nav a {
@@ -153,7 +157,7 @@ h2 {
     }
 
     .grid {
-        grid-template-columns: 1fr; /* Single column on smaller screens */
+        grid-template-columns: 1fr;
     }
 
     .card {
@@ -184,31 +188,39 @@ h2 {
 .hero {
     text-align: center;
     padding: 4rem 0;
-    background: rgba(255, 255, 255, 0.9); /* Semi-transparent white overlay */
+    background: rgba(255, 255, 255, 0.9);
     border-radius: 12px;
     margin-bottom: 3rem;
 }
 
 .hero-subtitle {
     font-size: 1.25rem;
-    color: #4a5568; /* Slightly lighter gray */
+    color: #4a5568;
     max-width: 800px;
     margin: 1rem auto;
 }
 
 .cta-button {
     display: inline-block;
-    padding: 0.75rem 1.5rem;
-    background: #38a169; /* Green from available status */
+    padding: 1rem 2rem; /* Larger for visibility */
+    background: #38a169;
     color: white;
     text-decoration: none;
     border-radius: 8px;
     font-weight: 500;
+    font-size: 1.2rem; /* Larger text */
     transition: background 0.3s ease, transform 0.3s ease;
 }
 
+.cta-button::before {
+    content: '\f00c'; /* Font Awesome check icon */
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    margin-right: 0.5rem;
+}
+
 .cta-button:hover {
-    background: #2f855a; /* Darker green on hover */
+    background: #2f855a;
     transform: translateY(-2px);
 }
 
@@ -236,7 +248,7 @@ footer {
     border-top: 1px solid #edf2f7;
 }
 
-/* Header Section (reuse from availability, adjusted) */
+/* Header Section */
 .header {
     text-align: center;
     padding: 3rem 0 1rem;
@@ -292,13 +304,14 @@ table {
     overflow: hidden;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
     margin-bottom: 2.5rem;
+    font-size: 1rem; /* Set for readability */
 }
 
 th, td {
     padding: 1rem;
-    text-align: center; /* Center for better alignment */
+    text-align: center;
     border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0; /* Vertical lines between columns */
+    border-right: 1px solid #e2e8f0;
 }
 
 th {
@@ -315,12 +328,16 @@ td.occupied {
     color: #e53e3e;
 }
 
+tr:nth-child(even) {
+    background: #f7fafc; /* Alternating row colors */
+}
+
 tr:last-child td {
     border-bottom: none;
 }
 
 th:last-child, td:last-child {
-    border-right: none; /* Remove right border on last column */
+    border-right: none;
 }
 
 /* Responsive Adjustments */
@@ -368,17 +385,35 @@ th:last-child, td:last-child {
 .analytics .chart {
     max-width: 600px;
     margin: 2rem auto 0;
+    padding: 1rem; /* Padding for clarity */
+    background: #ffffff; /* White background */
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+    opacity: 0;
+    animation: fadeIn 0.5s ease forwards 0.3s; /* Delayed fade-in */
 }
 
 /* Color Coding */
 .analytics .occupied {
-    color: #e53e3e; /* Red for occupied */
+    color: #e53e3e;
     font-weight: 500;
 }
 
 .analytics .available {
-    color: #38a169; /* Green for available */
+    color: #38a169;
     font-weight: 500;
+}
+
+/* Fade-in Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Responsive Adjustments */

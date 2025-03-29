@@ -1,252 +1,339 @@
-<!DOCTYPE html>
+<!DOCTYPE HTML>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics - Smart Parking</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <script type="module">
-        import { firebaseConfig } from './firebase-config.js';
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+	<head>
+		<title>Analytics - Smart Parking</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+		<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+		<script type="module">
+			// Import Firebase configuration and SDK
+			import { firebaseConfig } from './firebase-config.js';
+			import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+			import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
-        try {
-            const app = initializeApp(firebaseConfig);
-            const db = getDatabase(app);
+			try {
+				// Initialize Firebase app and database
+				const app = initializeApp(firebaseConfig);
+				const db = getDatabase(app);
+				const historyRef = ref(db, "parking_history");
 
-            // Historical/Overall Analytics
-            const historyRef = ref(db, "parking_history");
-            onValue(historyRef, (snapshot) => {
-                const data = snapshot.val();
-                let totalEvents = 0;
-                let occupiedEvents = 0;
-                let occupancyDurations = [];
-                let slotStats = {};
-                let hourlyUsage = Array(24).fill(0);
-                let dailyUsage = {};
+				// Listen for real-time updates from the "parking_history" node
+				onValue(historyRef, (snapshot) => {
+					const data = snapshot.val();
+					let totalEvents = 0;
+					let occupiedEvents = 0;
+					let occupancyDurations = [];
+					let slotStats = {};
+					let hourlyUsage = Array(24).fill(0);
+					let dailyUsage = {};
 
-                if (data) {
-                    for (const slot in data) {
-                        const slotNumber = slot.replace('slot', '');
-                        const events = Object.values(data[slot]).sort((a, b) => 
-                            new Date(a.timestamp) - new Date(b.timestamp)
-                        );
-                        totalEvents += events.length;
-                        slotStats[slotNumber] = { occupied: 0, total: events.length };
+					if (data) {
+						for (const slot in data) {
+							const slotNumber = slot.replace('slot', '');
+							const events = Object.values(data[slot]).sort((a, b) =>
+								new Date(a.timestamp) - new Date(b.timestamp)
+							);
+							totalEvents += events.length;
+							slotStats[slotNumber] = { occupied: 0, total: events.length };
 
-                        events.forEach((entry, index) => {
-                            if (entry.occupied) {
-                                occupiedEvents++;
-                                slotStats[slotNumber].occupied++;
+							events.forEach((entry, index) => {
+								if (entry.occupied) {
+									occupiedEvents++;
+									slotStats[slotNumber].occupied++;
+									if (index < events.length - 1 && events[index + 1].timestamp) {
+										const start = new Date(entry.timestamp);
+										const end = new Date(events[index + 1].timestamp);
+										const duration = (end - start) / 1000 / 60;
+										if (duration > 0 && duration < 1440) occupancyDurations.push(duration);
+									}
+								}
+								if (entry.timestamp) {
+									const hour = new Date(entry.timestamp).getHours();
+									const date = new Date(entry.timestamp).toISOString().split('T')[0];
+									if (entry.occupied) {
+										hourlyUsage[hour]++;
+										dailyUsage[date] = (dailyUsage[date] || 0) + 1;
+									}
+								}
+							});
+						}
+					}
 
-                                if (index < events.length - 1 && events[index + 1].timestamp) {
-                                    const start = new Date(entry.timestamp);
-                                    const end = new Date(events[index + 1].timestamp);
-                                    const duration = (end - start) / 1000 / 60;
-                                    if (duration > 0 && duration < 1440) occupancyDurations.push(duration);
-                                }
-                            }
+					const historicalRate = totalEvents ? (occupiedEvents / totalEvents * 100).toFixed(2) : 0;
+					const avgDuration = occupancyDurations.length ?
+						(occupancyDurations.reduce((a, b) => a + b, 0) / occupancyDurations.length).toFixed(2) : 0;
 
-                            if (entry.timestamp) {
-                                const hour = new Date(entry.timestamp).getHours();
-                                const date = new Date(entry.timestamp).toISOString().split('T')[0];
-                                if (entry.occupied) {
-                                    hourlyUsage[hour]++;
-                                    dailyUsage[date] = (dailyUsage[date] || 0) + 1;
-                                }
-                            }
-                        });
-                    }
-                }
+					let slotStatsOutput = "";
+					for (const slot in slotStats) {
+						const rate = slotStats[slot].total ? (slotStats[slot].occupied / slotStats[slot].total * 100).toFixed(2) : 0;
+						slotStatsOutput += `
+							<div class="slot">
+								<p>Slot ${slot}</p>
+								<div class="progress-bar">
+									<div class="progress" style="width: ${rate}%"></div>
+								</div>
+								<p>${rate}% used</p>
+							</div>
+						`;
+					}
 
-                const historicalRate = totalEvents ? (occupiedEvents / totalEvents * 100).toFixed(2) : 0;
-                const avgDuration = occupancyDurations.length ? 
-                    (occupancyDurations.reduce((a, b) => a + b, 0) / occupancyDurations.length).toFixed(2) : 0;
+					const maxUsage = Math.max(...hourlyUsage);
+					const peakHours = hourlyUsage
+						.map((count, hour) => count === maxUsage ? hour : -1)
+						.filter(hour => hour !== -1)
+						.map(hour => `${hour}:00-${hour + 1}:00`)
+						.join(", ");
 
-                let slotStatsOutput = "";
-                for (const slot in slotStats) {
-                    const rate = slotStats[slot].total ? (slotStats[slot].occupied / slotStats[slot].total * 100).toFixed(2) : 0;
-                    slotStatsOutput += `<p>Slot ${slot}: <span class="occupied">${slotStats[slot].occupied}</span>/<span>${slotStats[slot].total}</span> (${rate}%)</p>`;
-                }
+					const now = new Date();
+					const last24h = new Date(now - 24 * 60 * 60 * 1000);
+					let recentEvents = 0;
+					if (data) {
+						for (const slot in data) {
+							recentEvents += Object.values(data[slot]).filter(entry =>
+								entry.timestamp && new Date(entry.timestamp) >= last24h
+							).length;
+						}
+					}
 
-                const maxUsage = Math.max(...hourlyUsage);
-                const peakHours = hourlyUsage
-                    .map((count, hour) => count === maxUsage ? hour : -1)
-                    .filter(hour => hour !== -1)
-                    .map(hour => `${hour}:00-${hour + 1}:00`)
-                    .join(", ");
+					document.getElementById("overallAnalytics").innerHTML = `
+						<div class="box">
+							<h3><i class="fas fa-chart-line"></i> Overall Statistics</h3>
+							<p><i class="fas fa-car"></i> Total Parking Activities: ${totalEvents}</p>
+							<p><i class="fas fa-parking"></i> Times Slots Were Used: ${occupiedEvents}</p>
+							<p><i class="fas fa-percentage"></i> Overall Usage Percentage: ${historicalRate}%
+								<span class="tooltip">?<span class="tooltiptext">How often slots were taken.</span></span></p>
+							<p><i class="fas fa-clock"></i> Average Time Used: ${avgDuration} minutes</p>
+						</div>
+						<div class="box">
+							<h3><i class="fas fa-parking"></i> Slot Usage</h3>
+							<div class="slot-stats">${slotStatsOutput || '<p>No slot data yet.</p>'}</div>
+						</div>
+						<div class="box">
+							<h3><i class="fas fa-clock"></i> Busiest Times</h3>
+							<p>${peakHours ? `Busiest Hours: ${peakHours}` : 'No busy times yet.'}</p>
+						</div>
+						<div class="box">
+							<h3><i class="fas fa-history"></i> Last 24 Hours</h3>
+							<p>Parking Activities: ${recentEvents}</p>
+						</div>
+					`;
 
-                const now = new Date();
-                const last24h = new Date(now - 24 * 60 * 60 * 1000);
-                let recentEvents = 0;
-                if (data) {
-                    for (const slot in data) {
-                        recentEvents += Object.values(data[slot]).filter(entry => 
-                            entry.timestamp && new Date(entry.timestamp) >= last24h
-                        ).length;
-                    }
-                }
+					let insights = "";
+					if (avgDuration > 0) insights += `<p><i class="fas fa-clock"></i> Cars usually stay for ${avgDuration} minutes.</p>`;
+					if (peakHours) insights += `<p><i class="fas fa-car"></i> Most parking happens between ${peakHours}.</p>`;
+					document.getElementById("insightsText").innerHTML = insights || "No fun facts yet!";
 
-                document.getElementById("overallAnalytics").innerHTML = `
-                    <div class="section">
-                        <h3>Overall Statistics</h3>
-                        <p>Total Events: ${totalEvents}</p>
-                        <p class="occupied">Occupied Events: ${occupiedEvents}</p>
-                        <p>Historical Occupancy Rate: ${historicalRate}%</p>
-                        <p>Average Occupancy Duration: ${avgDuration} minutes</p>
-                    </div>
-                    <div class="section">
-                        <h3>Per-Slot Occupancy</h3>
-                        ${slotStatsOutput || '<p>No slot data available.</p>'}
-                    </div>
-                    <div class="section">
-                        <h3>Peak Usage Times</h3>
-                        <p>${peakHours ? `Peak Hours: ${peakHours} (${maxUsage} occupancies)` : 'No peak data yet.'}</p>
-                    </div>
-                    <div class="section">
-                        <h3>Recent Activity (Last 24 Hours)</h3>
-                        <p>Events: ${recentEvents}</p>
-                    </div>
-                `;
+					updatePieChart(occupiedEvents, totalEvents - occupiedEvents);
+					updateBarChart(hourlyUsage);
+					updateDailyBarChart(dailyUsage);
+				}, (error) => {
+					console.error("Error fetching analytics data:", error);
+					document.getElementById("overallAnalytics").innerHTML = "<p class='error'>Error loading data: " + error.message + "</p>";
+					document.getElementById("insightsText").innerHTML = "<p class='error'>Error loading insights.</p>";
+				});
+			} catch (error) {
+				console.error("Firebase initialization error:", error);
+				document.getElementById("overallAnalytics").innerHTML = "<p class='error'>Failed to connect to Firebase: " + error.message + "</p>";
+				document.getElementById("insightsText").innerHTML = "<p class='error'>Connection failed.</p>";
+			}
 
-                // Charts
-                updatePieChart(occupiedEvents, totalEvents - occupiedEvents);
-                updateBarChart(hourlyUsage);
-                updateDailyBarChart(dailyUsage);
-            }, (error) => {
-                console.error("Error fetching history data:", error);
-                document.getElementById("overallAnalytics").innerHTML = "<p>Error: " + error.message + "</p>";
-            });
+			let pieChart = null;
+			function updatePieChart(occupied, available) {
+				const ctx = document.getElementById("overallPieChart").getContext("2d");
+				if (!ctx) {
+					console.error("Pie chart canvas not found");
+					return;
+				}
+				if (pieChart) pieChart.destroy();
+				pieChart = new Chart(ctx, {
+					type: 'pie',
+					data: {
+						labels: ['Used', 'Free'],
+						datasets: [{
+							data: [occupied, available],
+							backgroundColor: ['#f56a6a', '#38a169'],
+							borderColor: '#ffffff',
+							borderWidth: 2
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: true,
+						plugins: {
+							legend: { position: 'top' },
+							title: { display: true, text: 'How Often Are Slots Used?' }
+						}
+					}
+				});
+			}
 
-            // Pie Chart (Overall Occupancy)
-            let pieChart = null;
-            function updatePieChart(occupied, available) {
-                const ctx = document.getElementById("overallPieChart").getContext("2d");
-                if (pieChart) pieChart.destroy();
+			let hourlyBarChart = null;
+			function updateBarChart(hourlyUsage) {
+				const ctx = document.getElementById("hourlyBarChart").getContext("2d");
+				if (!ctx) {
+					console.error("Hourly bar chart canvas not found");
+					return;
+				}
+				if (hourlyBarChart) hourlyBarChart.destroy();
+				hourlyBarChart = new Chart(ctx, {
+					type: 'bar',
+					data: {
+						labels: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+						datasets: [{
+							label: 'Used Slots',
+							data: hourlyUsage,
+							backgroundColor: '#63b3ed',
+							borderColor: '#3d4449',
+							borderWidth: 1
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: true,
+						scales: {
+							y: { beginAtZero: true, title: { display: true, text: 'Times Used' } },
+							x: { title: { display: true, text: 'Hour of Day' } }
+						},
+						plugins: {
+							legend: { display: false },
+							title: { display: true, text: 'When Are Slots Most Used?' }
+						}
+					}
+				});
+			}
 
-                pieChart = new Chart(ctx, {
-                    type: 'pie',
-                    data: {
-                        labels: ['Occupied', 'Available'],
-                        datasets: [{
-                            data: [occupied, available],
-                            backgroundColor: ['#e53e3e', '#38a169'],
-                            borderColor: '#ffffff',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: { position: 'top' },
-                            title: { display: true, text: 'Overall Occupancy Distribution' }
-                        }
-                    }
-                });
-            }
+			let dailyBarChart = null;
+			function updateDailyBarChart(dailyUsage) {
+				const ctx = document.getElementById("dailyBarChart").getContext("2d");
+				if (!ctx) {
+					console.error("Daily bar chart canvas not found");
+					return;
+				}
+				if (dailyBarChart) dailyBarChart.destroy();
+				const dates = Object.keys(dailyUsage).sort();
+				const counts = dates.map(date => dailyUsage[date]);
+				dailyBarChart = new Chart(ctx, {
+					type: 'bar',
+					data: {
+						labels: dates,
+						datasets: [{
+							label: 'Used Slots',
+							data: counts,
+							backgroundColor: '#ecc94b',
+							borderColor: '#3d4449',
+							borderWidth: 1
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: true,
+						scales: {
+							y: { beginAtZero: true, title: { display: true, text: 'Times Used' } },
+							x: { title: { display: true, text: 'Date' } }
+						},
+						plugins: {
+							legend: { display: false },
+							title: { display: true, text: 'Usage Trends Over Days' }
+						}
+					}
+				});
+			}
+		</script>
+	</head>
+	<body class="is-preload">
 
-            // Bar Chart (Hourly Usage)
-            let hourlyBarChart = null;
-            function updateBarChart(hourlyUsage) {
-                const ctx = document.getElementById("hourlyBarChart").getContext("2d");
-                if (hourlyBarChart) hourlyBarChart.destroy();
+		<!-- Wrapper -->
+		<div id="wrapper">
 
-                hourlyBarChart = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: Array.from({ length: 24 }, (_, i) => `${i}:00`),
-                        datasets: [{
-                            label: 'Occupied Slots',
-                            data: hourlyUsage,
-                            backgroundColor: '#63b3ed',
-                            borderColor: '#2d3748',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            y: { beginAtZero: true, title: { display: true, text: 'Number of Occupancies' } },
-                            x: { title: { display: true, text: 'Hour of Day' } }
-                        },
-                        plugins: {
-                            legend: { display: false },
-                            title: { display: true, text: 'Hourly Usage Pattern' }
-                        }
-                    }
-                });
-            }
+			<!-- Main Content -->
+			<div id="main">
+				<div class="inner">
 
-            // Bar Chart (Daily Usage)
-            let dailyBarChart = null;
-            function updateDailyBarChart(dailyUsage) {
-                const ctx = document.getElementById("dailyBarChart").getContext("2d");
-                if (dailyBarChart) dailyBarChart.destroy();
+					<!-- Header -->
+					<header id="header">
+						<a href="index.html" class="logo"><strong>Smart Parking System</strong></a>
+					</header>
 
-                const dates = Object.keys(dailyUsage).sort();
-                const counts = dates.map(date => dailyUsage[date]);
+					<!-- Main Section -->
+					<section>
+						<header class="main">
+							<h1><i class="fas fa-chart-bar"></i> Parking Analytics</h1>
+							<p class="header-subtitle">See how parking spaces are used with fun, easy charts!</p>
+						</header>
 
-                dailyBarChart = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: dates,
-                        datasets: [{
-                            label: 'Occupied Slots',
-                            data: counts,
-                            backgroundColor: '#ecc94b', // Yellow for daily trend
-                            borderColor: '#2d3748',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            y: { beginAtZero: true, title: { display: true, text: 'Number of Occupancies' } },
-                            x: { title: { display: true, text: 'Date' } }
-                        },
-                        plugins: {
-                            legend: { display: false },
-                            title: { display: true, text: 'Daily Usage Trend' }
-                        }
-                    }
-                });
-            }
-        } catch (error) {
-            console.error("Firebase initialization error:", error);
-            document.getElementById("overallAnalytics").innerHTML = "<p>Failed to connect to Firebase: " + error.message + "</p>";
-        }
-    </script>
-</head>
-<body>
-    <nav>
-        <a href="index.html">Home</a>
-        <a href="availability.html">Current Availability</a>
-        <a href="history.html">History</a>
-        <a href="analytics.html">Analytics</a>
-    </nav>
-    <div class="container analytics">
-        <!-- Header Section -->
-        <section class="header">
-            <h1>Overall Parking Analytics</h1>
-            <p class="header-subtitle">Explore historical usage patterns and trends with interactive charts.</p>
-        </section>
+						<!-- Analytics Overview -->
+						<h2>Analytics Overview</h2>
+						<div id="overallAnalytics" class="box">Loading...</div>
 
-        <!-- Overall Analytics -->
-        <section class="section">
-            <h2>Analytics Overview</h2>
-            <div class="card">
-                <div id="overallAnalytics">Loading...</div>
-                <canvas id="overallPieChart" class="chart"></canvas>
-                <canvas id="hourlyBarChart" class="chart"></canvas>
-                <canvas id="dailyBarChart" class="chart"></canvas>
-            </div>
-        </section>
+						<!-- Charts -->
+						<div class="charts">
+							<div class="box chart-container">
+								<canvas id="overallPieChart"></canvas>
+							</div>
+							<div class="box chart-container">
+								<canvas id="hourlyBarChart"></canvas>
+							</div>
+							<div class="box chart-container">
+								<canvas id="dailyBarChart"></canvas>
+							</div>
+						</div>
 
-        <!-- Footer -->
-        <footer>
-            <p>© 2025 Smart Parking System. Powered by Firebase.</p>
-        </footer>
-    </div>
-</body>
+						<!-- Insights -->
+						<h2><i class="fas fa-lightbulb"></i> Fun Facts</h2>
+						<div id="insightsText" class="box">Loading fun facts...</div>
+					</section>
+
+				</div>
+			</div>
+
+			<!-- Sidebar -->
+			<div id="sidebar">
+				<div class="inner">
+
+					<!-- Navigation Menu -->
+					<nav id="menu">
+						<header class="major">
+							<h2>Menu</h2>
+						</header>
+						<ul>
+							<li><a href="index.html">Home</a></li>
+							<li><a href="availability.html">Current Availability</a></li>
+							<li><a href="history.html">History</a></li>
+							<li><a href="analytics.html">Analytics</a></li>
+						</ul>
+					</nav>
+
+					<!-- Contact Section -->
+					<section>
+						<header class="major">
+							<h2>Get in Touch</h2>
+						</header>
+						<p>Contact us for more information about the Smart Parking System.</p>
+						<ul class="contact">
+							<li class="icon solid fa-envelope"><a href="#">info@smartparking.com</a></li>
+							<li class="icon solid fa-phone">(123) 456-7890</li>
+							<li class="icon solid fa-home">123 Parking Lane<br />City, State 12345</li>
+						</ul>
+					</section>
+
+					<!-- Footer -->
+					<footer id="footer">
+						<p class="copyright">© 2025 Smart Parking System. Powered by Firebase.</p>
+					</footer>
+
+				</div>
+			</div>
+
+		</div>
+
+		<!-- Scripts -->
+		<script src="assets/js/jquery.min.js"></script>
+		<script src="assets/js/browser.min.js"></script>
+		<script src="assets/js/breakpoints.min.js"></script>
+		<script src="assets/js/util.js"></script>
+		<script src="assets/js/main.js"></script>
+
+	</body>
 </html>
